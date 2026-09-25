@@ -1,0 +1,162 @@
+/**
+ * POST /google/token: swap a code (with PKCE) or a refresh token for an
+ * access token. The relay adds the client secret and passes back only
+ * the fields the store needs.
+ */
+import { decodeText } from './base64url';
+import { challengeFor, readTicket } from './ticket';
+import type { Deps, Env } from './types';
+
+export const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+
+const VERIFIER = /^[A-Za-z0-9._~-]{43,128}$/;
+const OAUTH_ERROR = /^[a-z_]{1,64}$/;
+const MAX_TOKEN = 2048;
+
+type TokenRequest =
+	| { grant: 'code'; code: string; code_verifier: string; ticket: string }
+	| { grant: 'refresh'; refresh_token: string };
+
+const isText = ( value: unknown, max = MAX_TOKEN ): value is string =>
+	typeof value === 'string' && value.length > 0 && value.length <= max;
+
+function parseBody( data: unknown ): TokenRequest | null {
+	if ( typeof data !== 'object' || data === null || Array.isArray( data ) ) {
+		return null;
+	}
+	const o = data as Record< string, unknown >;
+	if (
+		o.grant === 'code' &&
+		isText( o.code ) &&
+		typeof o.code_verifier === 'string' &&
+		VERIFIER.test( o.code_verifier ) &&
+		isText( o.ticket, 4096 )
+	) {
+		return {
+			grant: 'code',
+			code: o.code,
+			code_verifier: o.code_verifier,
+			ticket: o.ticket,
+		};
+	}
+	if ( o.grant === 'refresh' && isText( o.refresh_token ) ) {
+		return { grant: 'refresh', refresh_token: o.refresh_token };
+	}
+	return null;
+}
+
+function json( body: object, status = 200 ): Response {
+	return new Response( JSON.stringify( body ), {
+		status,
+		headers: {
+			'Content-Type': 'application/json',
+			'Cache-Control': 'no-store',
+		},
+	} );
+}
+
+const invalid = () => json( { error: 'invalid_request' }, 400 );
+const upstream = () => json( { error: 'upstream' }, 502 );
+
+/**
+ * The `email` claim of an ID token received straight from Google's token
+ * endpoint over HTTPS, which needs no signature check (Google's OpenID
+ * Connect docs). Only the email is passed on, never the token.
+ */
+export function emailFromIdToken( idToken: unknown ): string | null {
+	if ( typeof idToken !== 'string' ) {
+		return null;
+	}
+	const text = decodeText( idToken.split( '.' )[ 1 ] ?? '' );
+	if ( ! text ) {
+		return null;
+	}
+	try {
+		const claims: unknown = JSON.parse( text );
+		const email = ( claims as Record< string, unknown > )?.email;
+		return typeof email === 'string' ? email : null;
+	} catch {
+		return null;
+	}
+}
+
+export async function handleToken(
+	request: Request,
+	env: Env,
+	deps: Deps
+): Promise< Response > {
+	if ( request.method !== 'POST' ) {
+		return json( { error: 'invalid_request' }, 405 );
+	}
+	let data: unknown;
+	try {
+		data = await request.json();
+	} catch {
+		return invalid();
+	}
+	const req = parseBody( data );
+	if ( ! req ) {
+		return invalid();
+	}
+
+	const form = new URLSearchParams( {
+		client_id: env.GOOGLE_CLIENT_ID,
+		client_secret: env.GOOGLE_CLIENT_SECRET,
+	} );
+	if ( req.grant === 'code' ) {
+		// The relay's own PKCE check, whether or not Google checks too.
+		const ticket = await readTicket( req.ticket, env.TICKET_KEY );
+		if ( ! ticket || ticket.c !== ( await challengeFor( req.code_verifier ) ) ) {
+			return invalid();
+		}
+		form.set( 'grant_type', 'authorization_code' );
+		form.set( 'code', req.code );
+		form.set( 'code_verifier', req.code_verifier );
+		form.set( 'redirect_uri', env.REDIRECT_URI );
+	} else {
+		form.set( 'grant_type', 'refresh_token' );
+		form.set( 'refresh_token', req.refresh_token );
+	}
+
+	let res: Response;
+	let body: Record< string, unknown >;
+	try {
+		res = await deps.fetch( GOOGLE_TOKEN_URL, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+			body: form.toString(),
+		} );
+		body = ( await res.json() ) as Record< string, unknown >;
+	} catch {
+		return upstream();
+	}
+	if ( typeof body !== 'object' || body === null ) {
+		return upstream();
+	}
+
+	if ( ! res.ok ) {
+		const code = body.error;
+		return res.status < 500 && typeof code === 'string' && OAUTH_ERROR.test( code )
+			? json( { error: code }, 400 )
+			: upstream();
+	}
+	if ( typeof body.access_token !== 'string' ) {
+		return upstream();
+	}
+
+	const out: Record< string, unknown > = {
+		access_token: body.access_token,
+		expires_in: typeof body.expires_in === 'number' ? body.expires_in : 3600,
+		scope: typeof body.scope === 'string' ? body.scope : '',
+	};
+	if ( req.grant === 'code' ) {
+		if ( typeof body.refresh_token === 'string' ) {
+			out.refresh_token = body.refresh_token;
+		}
+		const email = emailFromIdToken( body.id_token );
+		if ( email ) {
+			out.email = email;
+		}
+	}
+	return json( out );
+}
