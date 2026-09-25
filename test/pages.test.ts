@@ -16,6 +16,13 @@ describe( 'confirmPage', () => {
 		expect( html ).toContain( 'Cancel' );
 	} );
 
+	// Review finding: a long look-alike host ran off the card on a phone,
+	// hiding the part that names the real destination.
+	it( 'wraps a long host instead of running off the card', () => {
+		expect( html ).toMatch( /\.host \{[^}]*overflow-wrap: anywhere/ );
+		expect( html ).toMatch( /h1 \{[^}]*overflow-wrap: anywhere/ );
+	} );
+
 	it( 'has no scripts and no em-dashes', () => {
 		expect( html ).not.toMatch( /<script/i );
 		expect( html ).not.toContain( '—' );

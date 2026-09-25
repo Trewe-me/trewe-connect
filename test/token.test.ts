@@ -40,7 +40,7 @@ const TOKENS = {
 	scope: 'openid https://www.googleapis.com/auth/webmasters.readonly https://www.googleapis.com/auth/userinfo.email',
 	token_type: 'Bearer',
 	refresh_token: '1//refresh',
-	id_token: idToken( { email: 'maya@example.com', sub: '1' } ),
+	id_token: idToken( { email: 'maya@example.com', sub: '1', nonce: CHALLENGE } ),
 };
 
 describe( 'POST /google/token, code grant', () => {
@@ -101,6 +101,42 @@ describe( 'POST /google/token, code grant', () => {
 				deps( google( 200, TOKENS ) )
 			);
 			expect( res.status ).toBe( 400 );
+		}
+	} );
+} );
+
+describe( 'POST /google/token, code bound to its ticket', () => {
+	// Review finding: the verifier check alone lets someone pair a stolen
+	// code with a ticket and verifier they minted themselves. Google echoes
+	// the authorize request's nonce (the ticket's challenge) in the ID
+	// token, so the relay checks the code came from this ticket's flow.
+	it( 'refuses a code whose ID token names another flow, returning no tokens', async () => {
+		const res = await handleToken(
+			post( { grant: 'code', code: '4/0Ab-stolen', code_verifier: VERIFIER, ticket: await ticket() } ),
+			ENV,
+			deps(
+				google( 200, {
+					...TOKENS,
+					id_token: idToken( { email: 'victim@example.com', nonce: 'a'.repeat( 43 ) } ),
+				} )
+			)
+		);
+		expect( res.status ).toBe( 400 );
+		const body = await res.text();
+		expect( JSON.parse( body ) ).toEqual( { error: 'invalid_request' } );
+		expect( body ).not.toContain( 'ya29' );
+		expect( body ).not.toContain( '1//refresh' );
+	} );
+
+	it( 'refuses a code grant with no readable ID token', async () => {
+		for ( const id_token of [ undefined, 'not.a.jwt', idToken( { email: 'maya@example.com' } ) ] ) {
+			const res = await handleToken(
+				post( { grant: 'code', code: '4/0Ab', code_verifier: VERIFIER, ticket: await ticket() } ),
+				ENV,
+				deps( google( 200, { ...TOKENS, id_token } ) )
+			);
+			expect( res.status ).toBe( 400 );
+			expect( await res.json() ).toEqual( { error: 'invalid_request' } );
 		}
 	} );
 } );

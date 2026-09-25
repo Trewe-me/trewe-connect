@@ -42,6 +42,8 @@ describe( 'GET /google/authorize', () => {
 			include_granted_scopes: 'true',
 			code_challenge: CHALLENGE,
 			code_challenge_method: 'S256',
+			// Google echoes the nonce in the ID token; /google/token checks it.
+			nonce: CHALLENGE,
 		} );
 
 		const ticket = await readTicket(

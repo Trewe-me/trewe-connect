@@ -24,7 +24,7 @@ Query: `return`, `state`, `code_challenge`.
 
 The relay signs a ticket (base64url of `{ "r": return, "s": state, "c": code_challenge, "e": now + 600 }`, a dot, and base64url of its HMAC-SHA256 under `TICKET_KEY`) and answers with a page that has no scripts: "Connect **example.com** to Google Search Console?", with **Continue to Google** and **Cancel**. The page shows the host the browser will really go to, so a link crafted to connect someone's Search Console to a stranger's site is visible before anything happens.
 
-- **Continue** goes to `https://accounts.google.com/o/oauth2/v2/auth` with `client_id`, `redirect_uri`, `response_type=code`, `scope=openid email https://www.googleapis.com/auth/webmasters.readonly`, `access_type=offline`, `prompt=consent`, `include_granted_scopes=true`, `state=<ticket>`, `code_challenge` and `code_challenge_method=S256`.
+- **Continue** goes to `https://accounts.google.com/o/oauth2/v2/auth` with `client_id`, `redirect_uri`, `response_type=code`, `scope=openid email https://www.googleapis.com/auth/webmasters.readonly`, `access_type=offline`, `prompt=consent`, `include_granted_scopes=true`, `state=<ticket>`, `code_challenge`, `code_challenge_method=S256` and `nonce` (the same value as `code_challenge`).
 - **Cancel** goes to `return` with `trewe_google_error=access_denied` and `trewe_google_state` added.
 
 ### `GET /google/callback`
@@ -41,7 +41,10 @@ Called by the store's server, with a JSON body:
 - `{ "grant": "code", "code": "...", "code_verifier": "...", "ticket": "..." }`
 - `{ "grant": "refresh", "refresh_token": "..." }`
 
-For a code grant the relay first checks the ticket's signature and that `base64url(SHA-256(code_verifier))` equals the ticket's challenge. If it doesn't, the answer is a 400 and Google is never called. So a code copied from a store's access log can't be exchanged without the verifier.
+For a code grant the relay checks two things, so a code copied from a store's access log can't be exchanged, whether or not Google checks PKCE too:
+
+1. Before calling Google: the ticket's signature, and that `base64url(SHA-256(code_verifier))` equals the ticket's challenge. If either fails, the answer is a 400 and Google is never called.
+2. After: that the ID token's `nonce` equals the ticket's challenge, which proves the code came from this ticket's flow. A code paired with a ticket and verifier someone minted for themselves fails here, and the answer is a 400 with no tokens. The tokens aren't revoked, because revoking one token of a grant can revoke the account owner's other tokens.
 
 The relay adds `client_id`, `client_secret` and (code grant only) `redirect_uri`, posts to `https://oauth2.googleapis.com/token`, and answers with only these fields:
 
@@ -54,7 +57,7 @@ The relay adds `client_id`, `client_secret` and (code grant only) `redirect_uri`
 Errors:
 
 - 400 `{ "error": "<Google's error code>" }` when Google refuses, for example `invalid_grant`.
-- 400 `{ "error": "invalid_request" }` for a body of the wrong shape or a failed ticket check.
+- 400 `{ "error": "invalid_request" }` for a body of the wrong shape, a failed ticket check, or an ID token whose `nonce` doesn't match.
 - 502 `{ "error": "upstream" }` when Google is unreachable, answers 5xx, or answers something that isn't a token.
 - 405 for any method but `POST`.
 

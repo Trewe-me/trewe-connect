@@ -49,6 +49,9 @@ export async function handleAuthorize(
 		state: ticket,
 		code_challenge: challenge,
 		code_challenge_method: 'S256',
+		// Google puts the nonce in the ID token, so /google/token can check
+		// a code came from this ticket's flow. The challenge is already public.
+		nonce: challenge,
 	} ).toString();
 
 	const cancel = addParams( ret, {

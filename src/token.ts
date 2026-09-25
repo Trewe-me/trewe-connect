@@ -59,11 +59,11 @@ const invalid = () => json( { error: 'invalid_request' }, 400 );
 const upstream = () => json( { error: 'upstream' }, 502 );
 
 /**
- * The `email` claim of an ID token received straight from Google's token
+ * The claims of an ID token received straight from Google's token
  * endpoint over HTTPS, which needs no signature check (Google's OpenID
  * Connect docs). Only the email is passed on, never the token.
  */
-export function emailFromIdToken( idToken: unknown ): string | null {
+export function idTokenClaims( idToken: unknown ): Record< string, unknown > | null {
 	if ( typeof idToken !== 'string' ) {
 		return null;
 	}
@@ -73,8 +73,9 @@ export function emailFromIdToken( idToken: unknown ): string | null {
 	}
 	try {
 		const claims: unknown = JSON.parse( text );
-		const email = ( claims as Record< string, unknown > )?.email;
-		return typeof email === 'string' ? email : null;
+		return typeof claims === 'object' && claims !== null && ! Array.isArray( claims )
+			? ( claims as Record< string, unknown > )
+			: null;
 	} catch {
 		return null;
 	}
@@ -99,6 +100,7 @@ export async function handleToken(
 		return invalid();
 	}
 
+	let ticketChallenge = '';
 	const form = new URLSearchParams( {
 		client_id: env.GOOGLE_CLIENT_ID,
 		client_secret: env.GOOGLE_CLIENT_SECRET,
@@ -109,6 +111,7 @@ export async function handleToken(
 		if ( ! ticket || ticket.c !== ( await challengeFor( req.code_verifier ) ) ) {
 			return invalid();
 		}
+		ticketChallenge = ticket.c;
 		form.set( 'grant_type', 'authorization_code' );
 		form.set( 'code', req.code );
 		form.set( 'code_verifier', req.code_verifier );
@@ -150,12 +153,21 @@ export async function handleToken(
 		scope: typeof body.scope === 'string' ? body.scope : '',
 	};
 	if ( req.grant === 'code' ) {
+		// The ticket's challenge was the authorize request's nonce, and
+		// Google echoes it in the ID token. A code from any other flow
+		// (copied from a store's log, paired with a ticket and verifier
+		// someone minted) doesn't match: send back no tokens. They aren't
+		// revoked, because revoking one token of a grant can revoke the
+		// grant's other tokens, which would disconnect the account's owner.
+		const claims = idTokenClaims( body.id_token );
+		if ( ! claims || claims.nonce !== ticketChallenge ) {
+			return invalid();
+		}
 		if ( typeof body.refresh_token === 'string' ) {
 			out.refresh_token = body.refresh_token;
 		}
-		const email = emailFromIdToken( body.id_token );
-		if ( email ) {
-			out.email = email;
+		if ( typeof claims.email === 'string' ) {
+			out.email = claims.email;
 		}
 	}
 	return json( out );

@@ -45,9 +45,9 @@ function layout( title: string, body: string ): string {
 body { margin: 0; background: #f6f7f9; color: #1b1f29; font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
 main { max-width: 460px; margin: 48px auto; padding: 28px; background: #fff; border: 1px solid #dfe3ea; border-radius: 10px; display: flex; flex-direction: column; gap: 14px; }
 .brand { font-size: 13px; font-weight: 600; color: #0F348A; }
-h1 { margin: 0; font-size: 21px; line-height: 1.3; }
+h1 { margin: 0; font-size: 21px; line-height: 1.3; overflow-wrap: anywhere; }
 p { margin: 0; color: #3d4350; }
-.host { font-family: ui-monospace, Menlo, Consolas, monospace; background: #eef1f6; padding: 1px 6px; border-radius: 4px; color: #1b1f29; }
+.host { font-family: ui-monospace, Menlo, Consolas, monospace; background: #eef1f6; padding: 1px 6px; border-radius: 4px; color: #1b1f29; overflow-wrap: anywhere; }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
 .button { display: inline-block; padding: 9px 16px; border-radius: 6px; border: 1px solid #0F348A; font-weight: 600; text-decoration: none; background: #0F348A; color: #fff; }
 .button.ghost { background: #fff; color: #0F348A; }
