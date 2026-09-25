@@ -1,0 +1,5 @@
+# Copy to .dev.vars (untracked) for `npm run dev`.
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+TICKET_KEY=
+REDIRECT_URI=http://localhost:8787/google/callback

@@ -1,0 +1,19 @@
+{
+  "name": "trewe-connect",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sign-in relay that connects AI Storefront stores to Google Search Console.",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev --port 8787",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.140.0"
+  }
+}
