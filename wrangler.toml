@@ -1,0 +1,32 @@
+name = "trewe-connect"
+main = "src/index.ts"
+compatibility_date = "2026-09-25"
+
+# Only the custom domain serves the relay; no *.workers.dev address.
+workers_dev = false
+
+# Google puts the one-time code in /google/callback's URL, and new
+# Workers log every request URL by default. Keep logging off.
+[observability]
+enabled = false
+
+[vars]
+# Filled in from Google Cloud Console once the OAuth client exists
+# (README, setup step 4). Client IDs aren't secret.
+GOOGLE_CLIENT_ID = ""
+REDIRECT_URI = "https://connect.trewe.me/google/callback"
+
+[[routes]]
+pattern = "connect.trewe.me"
+custom_domain = true
+
+# Per IP and path, 30 requests a minute, counted per Cloudflare location.
+# If deploying on the free plan rejects this block, remove it and add a
+# WAF rate-limiting rule on /google/token instead (README, Deploy).
+[[ratelimits]]
+name = "RATE_LIMITER"
+namespace_id = "1001"
+
+  [ratelimits.simple]
+  limit = 30
+  period = 60
