@@ -2,8 +2,10 @@ name = "trewe-connect"
 main = "src/index.ts"
 compatibility_date = "2026-09-25"
 
-# Only the custom domain serves the relay; no *.workers.dev address.
+# Only the custom domain serves the relay; no *.workers.dev address
+# and no preview URLs.
 workers_dev = false
+preview_urls = false
 
 # Google puts the one-time code in /google/callback's URL, and new
 # Workers log every request URL by default. Keep logging off.

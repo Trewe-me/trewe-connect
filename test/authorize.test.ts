@@ -74,8 +74,11 @@ describe( 'GET /google/authorize', () => {
 			return: 'https://evil.example\\@saltwarp.shop/wp-admin/admin.php',
 		} );
 		const res = await handleAuthorize( url, ENV, deps() );
+		expect( res.status ).toBe( 200 );
 		const html = await res.text();
-		expect( html ).not.toContain( '<span class="host">saltwarp.shop</span>' );
+		expect( html ).toContain( '<span class="host">evil.example</span>' );
+		const cancel = hrefs( html ).find( ( h ) => ! h.startsWith( 'https://accounts.google.com/' ) && h.includes( 'trewe_google_error' ) ) as string;
+		expect( new URL( cancel ).host ).toBe( 'evil.example' );
 	} );
 
 	it( 'refuses a bad return URL, state or challenge with a 400 page', async () => {

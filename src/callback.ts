@@ -1,7 +1,10 @@
 /**
  * GET /google/callback?code&state (or error&state): Google's redirect.
- * `state` is the relay's ticket. The relay redirects only to a return URL
- * it signed, so it can't be used as an open redirect.
+ * `state` is the relay's ticket, and the relay redirects only to a return
+ * URL it signed. That limits, but doesn't remove, redirect abuse: anyone
+ * can get a ticket for any https address ending in /wp-admin/admin.php,
+ * valid for 10 minutes. The confirm page before Google is what stops a
+ * crafted connect; see README.md.
  */
 import { COPY, errorPage, htmlResponse } from './pages';
 import { addParams, parseReturnUrl } from './return-url';

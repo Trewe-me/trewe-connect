@@ -8,8 +8,10 @@ on:
 permissions:
   contents: read
 
+# Public repo: GitHub's standard runners are free here, and a self-hosted
+# runner would let anyone's pull request run code on it.
 jobs:
-  test:
+  typecheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,4 +21,30 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run typecheck
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Includes test/privacy.test.ts: no console calls in src/, Workers
+      # observability off, no workers.dev or preview URLs.
       - run: npm test
+
+  config:
+    runs-on: ubuntu-latest
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Bundles the Worker and validates wrangler.toml without deploying.
+      - run: npm run check:config

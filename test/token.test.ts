@@ -194,6 +194,13 @@ describe( 'POST /google/token, failures', () => {
 		}
 	} );
 
+	it( 'refuses a body over 16 KB without reading it all', async () => {
+		const big = JSON.stringify( { grant: 'refresh', refresh_token: 'r', pad: 'x'.repeat( 20000 ) } );
+		const res = await handleToken( post( big ), ENV, deps( google( 200, TOKENS ) ) );
+		expect( res.status ).toBe( 400 );
+		expect( await res.json() ).toEqual( { error: 'invalid_request' } );
+	} );
+
 	it( 'refuses bodies of the wrong shape and other methods', async () => {
 		for ( const body of [
 			'not json',

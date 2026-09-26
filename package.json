@@ -9,7 +9,8 @@
     "dev": "wrangler dev --port 8787",
     "deploy": "wrangler deploy",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:config": "wrangler deploy --dry-run --outdir .wrangler/dry-run"
   },
   "devDependencies": {
     "typescript": "^5.9.3",
