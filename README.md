@@ -130,7 +130,7 @@ In this order. Piero does these. Steps 1 to 6 are needed before the relay can be
 4. **Google Cloud project "AI Storefront"** in the organization; no billing account is needed. Turn on the Google Search Console API. In Google Auth Platform:
    - **Branding:** app name "AI Storefront"; user support email `admin@trewe.me` (the list offers only the signed-in account and Google Groups it manages, so `support@trewe.me` needs a group in admin.google.com first); homepage `https://trewe.me`; privacy policy `https://trewe.me/privacy`; authorized domain `trewe.me`; developer contact `admin@trewe.me`.
    - **Audience:** External, Testing, with Piero's Google account as a test user.
-   - **Data access:** `openid`, `…/auth/userinfo.email`, `…/auth/webmasters.readonly`.
+   - **Data access:** `openid`, `https://www.googleapis.com/auth/userinfo.email`, `https://www.googleapis.com/auth/webmasters.readonly` (full addresses: the manual entry box refuses the `…/auth/` shorthand the table shows; `webmasters.readonly` is listed only once the Search Console API is on).
 5. **OAuth client**, type Web application, with redirect URIs `https://connect.trewe.me/google/callback` and `http://localhost:8787/google/callback`. Save the client secret in a password manager when it's shown: Google shows it once. The client ID isn't secret; it goes in `wrangler.toml`.
 6. **Deploy** as in [Deploy](#deploy).
 7. **A Google-verified test property,** for example saltwarp.shop, verified through #262's Webmaster tools card. The dev store points at it with a local mu-plugin setting `trewe_ai_storefront_google_site_url` and `trewe_ai_storefront_google_connect_enabled`.
