@@ -12,6 +12,7 @@ export const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const VERIFIER = /^[A-Za-z0-9._~-]{43,128}$/;
 const OAUTH_ERROR = /^[a-z_]{1,64}$/;
 const MAX_TOKEN = 2048;
+const MAX_BODY = 16 * 1024;
 
 type TokenRequest =
 	| { grant: 'code'; code: string; code_verifier: string; ticket: string }
@@ -89,9 +90,18 @@ export async function handleToken(
 	if ( request.method !== 'POST' ) {
 		return json( { error: 'invalid_request' }, 405 );
 	}
+	// A real request is a few hundred bytes. Refusing big bodies keeps one
+	// request from spending the Worker's CPU budget on parsing.
+	if ( Number( request.headers.get( 'Content-Length' ) ?? 0 ) > MAX_BODY ) {
+		return invalid();
+	}
 	let data: unknown;
 	try {
-		data = await request.json();
+		const raw = await request.text();
+		if ( raw.length > MAX_BODY ) {
+			return invalid();
+		}
+		data = JSON.parse( raw );
 	} catch {
 		return invalid();
 	}

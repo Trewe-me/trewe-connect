@@ -34,6 +34,14 @@ describe( 'parseReturnUrl', () => {
 		}
 	} );
 
+	// Review finding: the raw length passed, then the percent-encoded URL
+	// the ticket carries was too long for the callback's check.
+	it( 'counts the length after encoding', () => {
+		const raw = `https://saltwarp.shop/wp-admin/admin.php?page=x&q=${ '中'.repeat( 250 ) }`;
+		expect( raw.length ).toBeLessThan( 2048 );
+		expect( parseReturnUrl( raw ) ).toBeNull();
+	} );
+
 	it( 'reports the host the browser will really visit', () => {
 		// A backslash is a path separator for https, so this is evil.example.
 		const url = parseReturnUrl(
@@ -44,6 +52,17 @@ describe( 'parseReturnUrl', () => {
 } );
 
 describe( 'addParams', () => {
+	it( "drops trewe_google_ parameters the return URL already had", () => {
+		const href = addParams(
+			new URL( `${ RETURN }&trewe_google_code=PLANTED&trewe_google_ticket=PLANTED` ),
+			{ trewe_google_error: 'access_denied', trewe_google_state: 's' }
+		);
+		const url = new URL( href );
+		expect( url.searchParams.has( 'trewe_google_code' ) ).toBe( false );
+		expect( url.searchParams.has( 'trewe_google_ticket' ) ).toBe( false );
+		expect( url.searchParams.get( 'page' ) ).toBe( 'trewe-ai-storefront' );
+	} );
+
 	it( 'adds parameters, keeping the ones already there', () => {
 		const href = addParams( new URL( RETURN ), {
 			trewe_google_code: '4/0A&b=c',

@@ -54,6 +54,43 @@ describe( 'handle', () => {
 		expect( ( await handle( new Request( AUTHORIZE ), ENV, deps() ) ).status ).toBe( 200 );
 	} );
 
+	it( 'answers the token endpoint with JSON when rate-limited', async () => {
+		const env: Env = { ...ENV, RATE_LIMITER: limiter( false ) };
+		const res = await handle(
+			new Request( 'https://connect.trewe.me/google/token', { method: 'POST', body: '{}' } ),
+			env,
+			deps()
+		);
+		expect( res.status ).toBe( 429 );
+		expect( await res.json() ).toEqual( { error: 'rate_limited' } );
+	} );
+
+	// Review finding: an empty client ID showed a normal confirm page that
+	// led to Google's error; a missing secret sent "undefined" to Google.
+	it( 'answers 503 when a variable or secret is missing', async () => {
+		for ( const missing of [ 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'TICKET_KEY', 'REDIRECT_URI' ] as const ) {
+			const env = { ...ENV, [ missing ]: '' } as Env;
+			const page = await handle( new Request( AUTHORIZE ), env, deps() );
+			expect( page.status ).toBe( 503 );
+			expect( await page.text() ).not.toContain( 'accounts.google.com' );
+			const token = await handle(
+				new Request( 'https://connect.trewe.me/google/token', { method: 'POST', body: '{}' } ),
+				env,
+				deps()
+			);
+			expect( token.status ).toBe( 503 );
+			expect( await token.json() ).toEqual( { error: 'not_configured' } );
+		}
+		expect( ( await handle( new Request( 'https://connect.trewe.me/' ), { ...ENV, TICKET_KEY: '' }, deps() ) ).status ).toBe( 200 );
+	} );
+
+	it( 'answers 500 without details when something throws', async () => {
+		const throwing = { ...deps(), now: () => { throw new Error( 'secret detail' ); } };
+		const res = await handle( new Request( AUTHORIZE ), ENV, throwing );
+		expect( res.status ).toBe( 500 );
+		expect( await res.text() ).not.toContain( 'secret detail' );
+	} );
+
 	it( 'exports a Worker fetch handler', () => {
 		expect( typeof worker.fetch ).toBe( 'function' );
 	} );

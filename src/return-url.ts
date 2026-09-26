@@ -28,12 +28,26 @@ export function parseReturnUrl( raw: string | null ): URL | null {
 	if ( ! url.pathname.endsWith( '/wp-admin/admin.php' ) ) {
 		return null;
 	}
+	// The ticket carries the parsed, percent-encoded form, which the
+	// callback checks again: count that one too.
+	if ( url.href.length > 2048 ) {
+		return null;
+	}
 	return url;
 }
 
-/** A copy of `url` with `params` set on its query string. */
+/**
+ * A copy of `url` with `params` set on its query string. Any `trewe_google_`
+ * parameter already there is dropped first, so the store reads only the
+ * relay's own.
+ */
 export function addParams( url: URL, params: Record< string, string > ): string {
 	const copy = new URL( url.href );
+	for ( const name of [ ...copy.searchParams.keys() ] ) {
+		if ( name.startsWith( 'trewe_google_' ) ) {
+			copy.searchParams.delete( name );
+		}
+	}
 	for ( const [ name, value ] of Object.entries( params ) ) {
 		copy.searchParams.set( name, value );
 	}

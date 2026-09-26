@@ -31,7 +31,8 @@ The relay signs a ticket (base64url of `{ "r": return, "s": state, "c": code_cha
 
 Query from Google: `code` and `state`, or `error` and `state`. `state` is the ticket.
 
-- A ticket with a bad signature, or past its expiry, gets a 400 page: "This link has expired". The relay never redirects to an address it didn't sign.
+- A ticket with a bad signature, or past its expiry, gets a 400 page: "This link has expired". The relay never redirects to an address it didn't sign. That limits redirect abuse without removing it: anyone can get a ticket for any https address ending in `/wp-admin/admin.php`, good for 10 minutes. The confirm page, which names the host, is what stops a crafted connect.
+- `trewe_google_` parameters already in the return URL are dropped, so the store reads only the relay's own.
 - Otherwise it redirects (302) to the ticket's `return` with `trewe_google_code`, `trewe_google_state` and `trewe_google_ticket` added, or `trewe_google_error` and `trewe_google_state`. An `error` that isn't a plain OAuth error code becomes `access_denied`.
 
 ### `POST /google/token`
@@ -59,13 +60,16 @@ Errors:
 - 400 `{ "error": "<Google's error code>" }` when Google refuses, for example `invalid_grant`.
 - 400 `{ "error": "invalid_request" }` for a body of the wrong shape, a failed ticket check, or an ID token whose `nonce` doesn't match.
 - 502 `{ "error": "upstream" }` when Google is unreachable, answers 5xx, or answers something that isn't a token.
+- 400 `{ "error": "invalid_request" }` for a body over 16 KB.
+- 429 `{ "error": "rate_limited" }` over 30 requests a minute from one IP.
+- 503 `{ "error": "not_configured" }` when a variable or secret is missing.
 - 405 for any method but `POST`.
 
 No response or error contains a token, a code or the secret.
 
 ### Everything else
 
-`GET /` is a one-line page linking here. Other paths are a 404. `/google/authorize` and `/google/token` are rate-limited per IP to 30 requests a minute.
+`GET /` is a one-line page linking here. Other paths are a 404. `/google/authorize` and `/google/token` are rate-limited per IP to 30 requests a minute. While a variable or secret is missing, every `/google/` path answers 503. An unexpected error answers 500 with no details.
 
 ## Develop
 
@@ -98,6 +102,12 @@ npm run deploy
 
 If the deploy rejects the `[[ratelimits]]` block on the free plan, delete it and add a WAF rate-limiting rule instead (Security › WAF › Rate limiting rules): URI path `/google/token`, 30 requests per 1 minute per IP, action Block.
 
+Then check it: `curl -s https://connect.trewe.me/` names the relay, and this link shows the confirm page naming saltwarp.shop (not a 503, which means a variable or secret is missing):
+
+```
+https://connect.trewe.me/google/authorize?return=https%3A%2F%2Fsaltwarp.shop%2Fwp-admin%2Fadmin.php&state=abcdefghijklmnopqrstuvwxyz012345&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
+```
+
 Rotating `TICKET_KEY` only breaks connects started in the last 10 minutes.
 
 ## Setup runbook
@@ -110,7 +120,7 @@ In this order. Piero does these.
 4. **OAuth client**, type Web application, with redirect URIs `https://connect.trewe.me/google/callback` and `http://localhost:8787/google/callback`.
 5. **Verify trewe.me in Search Console** as `admin@trewe.me` (a DNS TXT record). Google's review checks the authorized domain's ownership.
 6. **trewe.me pages.** A homepage that says what AI Storefront is, and a privacy policy that covers the Google data and includes Google's Limited Use statement: "AI Storefront's use and transfer of information received from Google APIs will adhere to the Google API Services User Data Policy, including the Limited Use requirements."
-7. **Deploy.** `wrangler secret put GOOGLE_CLIENT_SECRET`, `wrangler secret put TICKET_KEY`, set `GOOGLE_CLIENT_ID`, `wrangler deploy`, then add the custom domain `connect.trewe.me` to the Worker.
+7. **Deploy.** `wrangler secret put GOOGLE_CLIENT_SECRET`, `wrangler secret put TICKET_KEY`, set `GOOGLE_CLIENT_ID`, `wrangler deploy`. The route in `wrangler.toml` attaches the custom domain `connect.trewe.me` on deploy.
 8. **A Google-verified test property,** for example saltwarp.shop, verified through #262's Webmaster tools card. The dev store points at it with a local mu-plugin setting `trewe_ai_storefront_google_site_url` and `trewe_ai_storefront_google_connect_enabled`.
 9. **Review.** Once #206 connects end to end, submit for verification with the written justification and a demo video of the flow.
 
