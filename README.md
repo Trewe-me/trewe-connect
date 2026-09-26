@@ -95,37 +95,48 @@ add_filter( 'trewe_ai_storefront_google_connect_enabled', '__return_true' );
 
 ## Deploy
 
-```sh
-npx wrangler login
-npx wrangler secret put GOOGLE_CLIENT_SECRET
-npx wrangler secret put TICKET_KEY   # paste the output of: openssl rand -base64 32
-# Set GOOGLE_CLIENT_ID in wrangler.toml, then:
-npm run deploy
-```
+Needs runbook steps 1 to 5: trewe.me Active on Cloudflare, and the OAuth client's ID and secret.
+
+1. `npx wrangler login`, then `npx wrangler whoami` to confirm the account.
+2. Set `GOOGLE_CLIENT_ID` in `wrangler.toml` and merge that through a pull request (`main` is protected).
+3. From `main`: `npm run check:config`, then `npm run deploy`. The output lists the custom domain `connect.trewe.me`, whose DNS record and certificate the deploy creates. Until step 4 every `/google/` path answers 503 "not set up yet", which is harmless.
+4. Add the secrets. Each takes effect at once, with no redeploy:
+
+   ```sh
+   npx wrangler secret put GOOGLE_CLIENT_SECRET          # paste it at the prompt, never in a file or commit
+   openssl rand -base64 32 | npx wrangler secret put TICKET_KEY   # nobody needs to see this one
+   ```
+
+5. Check it:
+   - `curl -s https://connect.trewe.me/` prints the one line naming the relay.
+   - `curl -s -X POST https://connect.trewe.me/google/token -d '{}'` prints `{"error":"invalid_request"}`; `not_configured` means a secret or the client ID is missing.
+   - This link shows the confirm page naming saltwarp.shop, and Continue opens Google's consent screen for AI Storefront (after an unverified-app warning while the app is in Testing):
+
+   ```
+   https://connect.trewe.me/google/authorize?return=https%3A%2F%2Fsaltwarp.shop%2Fwp-admin%2Fadmin.php&state=abcdefghijklmnopqrstuvwxyz012345&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
+   ```
 
 If the deploy rejects the `[[ratelimits]]` block on the free plan, delete it and add a WAF rate-limiting rule instead (Security › WAF › Rate limiting rules): URI path `/google/token`, 30 requests per 1 minute per IP, action Block.
 
-Then check it: `curl -s https://connect.trewe.me/` names the relay, and this link shows the confirm page naming saltwarp.shop (not a 503, which means a variable or secret is missing):
-
-```
-https://connect.trewe.me/google/authorize?return=https%3A%2F%2Fsaltwarp.shop%2Fwp-admin%2Fadmin.php&state=abcdefghijklmnopqrstuvwxyz012345&code_challenge=E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM
-```
-
-Rotating `TICKET_KEY` only breaks connects started in the last 10 minutes.
+Rotating `TICKET_KEY` only breaks connects started in the last 10 minutes. Rotating the client secret: add a second secret in Google Cloud Console, `wrangler secret put GOOGLE_CLIENT_SECRET` with it, then delete the old one in Google.
 
 ## Setup runbook
 
-In this order. Piero does these.
+In this order. Piero does these. Steps 1 to 6 are needed before the relay can be deployed and tested; steps 8 and 9 only before Google's review.
 
-1. **Cloudflare.** Create an account with two-factor sign-in. Add trewe.me. Copy the website's two A records as DNS only. Turn on Email Routing for `support@trewe.me` and `admin@trewe.me`, forwarding to Piero's inbox. Change the nameservers at GoDaddy. There's no DNSSEC to turn off first.
-2. **Cloud Identity Free** for trewe.me: verify the domain with a TXT record, create `admin@trewe.me`, and sign in to Google Cloud Console as that user so the organization exists. Confirm the organization appears under IAM & Admin before step 3.
-3. **Google Cloud project "AI Storefront"** in the organization. Turn on the Google Search Console API. Branding: app name "AI Storefront", support email `support@trewe.me`, homepage `https://trewe.me`, privacy policy `https://trewe.me/privacy`, authorized domain `trewe.me`, developer contact `admin@trewe.me`. Audience: External, Testing, with Piero's Google account as a test user. Data access: `openid`, `email`, `…/auth/webmasters.readonly`.
-4. **OAuth client**, type Web application, with redirect URIs `https://connect.trewe.me/google/callback` and `http://localhost:8787/google/callback`.
-5. **Verify trewe.me in Search Console** as `admin@trewe.me` (a DNS TXT record). Google's review checks the authorized domain's ownership.
-6. **trewe.me pages.** A homepage that says what AI Storefront is, and a privacy policy that covers the Google data and includes Google's Limited Use statement: "AI Storefront's use and transfer of information received from Google APIs will adhere to the Google API Services User Data Policy, including the Limited Use requirements."
-7. **Deploy.** `wrangler secret put GOOGLE_CLIENT_SECRET`, `wrangler secret put TICKET_KEY`, set `GOOGLE_CLIENT_ID`, `wrangler deploy`. The route in `wrangler.toml` attaches the custom domain `connect.trewe.me` on deploy.
-8. **A Google-verified test property,** for example saltwarp.shop, verified through #262's Webmaster tools card. The dev store points at it with a local mu-plugin setting `trewe_ai_storefront_google_site_url` and `trewe_ai_storefront_google_connect_enabled`.
-9. **Review.** Once #206 connects end to end, submit for verification with the written justification and a demo video of the flow.
+1. **Cloudflare DNS.** Create an account with two-factor sign-in. Add trewe.me on the Free plan. Check the records Cloudflare imports against GoDaddy's DNS page: keep the website's records as DNS only (the site is on GoDaddy's site builder, `76.223.105.230` and `13.248.243.5` with `www` a CNAME to trewe.me, and behind Cloudflare's proxy it fails: first no certificate, then error 522), keep existing TXT records, and delete any `connect` record, since the deploy creates it. At GoDaddy, confirm DNSSEC is off, then switch to Cloudflare's two nameservers; GoDaddy stays the registrar. Wait for the zone to show Active. Leave Bot Fight Mode off: it can challenge the store servers that call `/google/token`, and the Free plan can't exempt them. AI crawler settings don't reach a DNS-only website.
+2. **Email Routing** for `support@trewe.me` and `admin@trewe.me`, forwarding to Piero's inbox. Step 3 sends mail to `admin@trewe.me`, so this comes first.
+3. **Cloud Identity Free** for trewe.me: verify the domain with a TXT record in Cloudflare, create `admin@trewe.me` with two-factor sign-in, and sign in to Google Cloud Console as that user so the organization exists. Confirm it under IAM & Admin → Manage resources before step 4; a project made earlier lands outside the organization.
+4. **Google Cloud project "AI Storefront"** in the organization; no billing account is needed. Turn on the Google Search Console API. In Google Auth Platform:
+   - **Branding:** app name "Trewe AI Storefront" (what the consent screen shows; the homepage should match); user support email `admin@trewe.me` (the list offers only the signed-in account and Google Groups it manages, so `support@trewe.me` needs a group in admin.google.com first); homepage `https://trewe.me`; privacy policy `https://trewe.me/privacy`; authorized domain `trewe.me`; developer contact `admin@trewe.me`.
+   - **Audience:** External, not Internal (Internal lets only trewe.me accounts sign in), with status Testing. Under Test users, add the Google account that owns the test property in step 7 (Piero's Gmail): in Testing, Google refuses every account not on that list.
+   - **Data access:** `openid`, `https://www.googleapis.com/auth/userinfo.email`, `https://www.googleapis.com/auth/webmasters.readonly` (full addresses: the manual entry box refuses the `…/auth/` shorthand the table shows; `webmasters.readonly` is listed only once the Search Console API is on).
+5. **OAuth client**, type Web application, with redirect URIs `https://connect.trewe.me/google/callback` and `http://localhost:8787/google/callback`. Save the client secret in a password manager when it's shown: Google shows it once. The client ID isn't secret; it goes in `wrangler.toml`.
+6. **Deploy** as in [Deploy](#deploy).
+7. **A Google-verified test property,** for example saltwarp.shop, verified through #262's Webmaster tools card. The dev store points at it with a local mu-plugin setting `trewe_ai_storefront_google_site_url` and `trewe_ai_storefront_google_connect_enabled`.
+8. **Before review: verify trewe.me in Search Console** as `admin@trewe.me` (a Domain property, with a TXT record in Cloudflare). Google's review checks the authorized domain's ownership.
+9. **Before review: trewe.me pages.** A homepage that says what AI Storefront is, and a privacy policy that covers the Google data and includes Google's Limited Use statement: "AI Storefront's use and transfer of information received from Google APIs will adhere to the Google API Services User Data Policy, including the Limited Use requirements."
+10. **Review.** Once #206 connects end to end, submit for verification with the written justification and a demo video of the flow.
 
 While the app is in Testing, a test store's approval lasts 7 days, so the test store shows `needs_reconnect` weekly. That also exercises the Reconnect path.
 
