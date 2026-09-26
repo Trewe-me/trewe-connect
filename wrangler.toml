@@ -15,7 +15,7 @@ enabled = false
 [vars]
 # Filled in from Google Cloud Console once the OAuth client exists
 # (README, setup step 4). Client IDs aren't secret.
-GOOGLE_CLIENT_ID = ""
+GOOGLE_CLIENT_ID = "287264917878-17el8otdqdj7at8b977pglrk2791246j.apps.googleusercontent.com"
 REDIRECT_URI = "https://connect.trewe.me/google/callback"
 
 [[routes]]
