@@ -75,9 +75,12 @@ No response or error contains a token, a code or the secret.
 
 ```sh
 npm install
-npm test
+npm test              # includes the logging-stays-off guards
 npm run typecheck
+npm run check:config  # validates wrangler.toml without deploying
 ```
+
+CI runs the same three as separate checks (`test`, `typecheck`, `config`) on GitHub's standard runners, which are free for public repositories.
 
 To run it locally, `cp .dev.vars.example .dev.vars`, fill in the Google client ID and secret and a `TICKET_KEY` from `openssl rand -base64 32`, then `npm run dev`. The relay listens on `http://localhost:8787`, and `http://localhost:8787/google/callback` must be a redirect URI on the OAuth client.
 
